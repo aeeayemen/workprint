@@ -1,0 +1,90 @@
+modules:
+  jira:globalPage:
+    - key: workprint-global-page
+      title: Workprint
+      resource: main
+      icon: resource:icons;icon.png
+      resolver:
+        function: resolver-fn
+
+  confluence:globalPage:
+    - key: workprint-confluence-page
+      title: Workprint
+      route: workprint
+      resource: main
+      icon: resource:icons;icon.png
+      resolver:
+        function: resolver-fn
+
+  rovo:agent:
+    - key: workprint-rovo-agent
+      name: Workprint Capacity Agent
+      description: Intelligent Atlassian Rovo agent that synthesizes developer
+        workload, PR review lag, and sprint bandwidth across Jira, Bitbucket,
+        and Confluence.
+      prompt: >
+        You are Workprint, an Atlassian intelligence agent that helps team
+        leads, engineering managers, and developers understand cross-tool
+        capacity and workload distribution. When asked about developer workload,
+        capacity, sprint balance, or code review bottlenecks, invoke the
+        `analyze-workprint` action with the user's name or ID. Always synthesize
+        the output clearly with workload distribution, highlight any critical
+        path AI warnings, and present the markdown deep-link to open the full
+        Workprint report.
+      actions:
+        - analyze-workprint
+
+  action:
+    - key: analyze-workprint
+      name: Analyze Developer Workload
+      description: Retrieves cross-product contribution metrics across Jira,
+        Bitbucket, and Confluence for an engineer, including capacity
+        percentage, PR review lag, and active task distribution.
+      function: rovo-action-handler
+      inputs:
+        userId:
+          title: User ID or Name
+          type: string
+          description: The username, identifier, or full name of the developer to inspect
+            (e.g., "alex-chen", "anas-k", "Alex Chen").
+          required: true
+      actionVerb: GET
+
+  function:
+    - key: resolver-fn
+      handler: index.handler
+    - key: rovo-action-handler
+      handler: index.rovoActionHandler
+
+resources:
+  - key: main
+    path: static/hello-world/build
+  - key: icons
+    path: assets
+
+permissions:
+  scopes:
+    - search:confluence
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - read:confluence-content.summary
+    - read:confluence-space.summary
+    - read:confluence-props
+    - read:me
+    - storage:app
+    - read:confluence-content.all
+    - read:confluence-user
+  external:
+    fetch:
+      backend:
+        - address: https://api.bitbucket.org
+  content:
+    styles:
+      - unsafe-inline
+
+app:
+
+  id: ari:cloud:ecosystem::app/8b0b16d7-8d2b-45da-b7ad-a7a645db3796
+  runtime:
+    name: nodejs22.x

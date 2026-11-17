@@ -1,31 +1,47 @@
-# Workprint 🚀
+# Forge Hello World
 
-**Workprint** is a powerful Atlassian Forge application designed to bridge the gap between fragmented engineering workflows. It unifies productivity metrics, tasks, and code activity from **Jira Software**, **Confluence**, and **Bitbucket** into a single, cohesive developer dashboard.
+This project contains a Forge app written in JavaScript that displays `Hello World!` in a Jira global page.
 
----
+See [developer.atlassian.com/platform/forge/](https://developer.atlassian.com/platform/forge) for documentation and tutorials explaining Forge.
 
-## ✨ Core Features
+## Requirements
 
-- **Cross-Platform Telemetry**: Automatically aggregates individual developer output across Jira issues, Confluence technical documentation, and Bitbucket Pull Requests.
-- **Rovo AI Capacity Synthesis**: Dynamically calculates workload distribution and triggers cognitive load warnings when a developer is balancing multiple high-priority tasks and reviews.
-- **Interactive Task Reassignment**: Spot project bottlenecks and instantly reassign Jira tasks to other squad members directly from the dashboard with a single click.
-- **Workprint Chat**: Query team progress and access instant performance summaries in seconds.
-- **Export & Reporting**: Seamlessly export audit-ready productivity reports.
+See [Set up Forge](https://developer.atlassian.com/platform/forge/set-up-forge/) for instructions to get set up.
 
----
+## Quick start
+- Install top-level dependencies:
+```
+npm install
+```
 
-## 🛠️ Tech Stack & Architecture
+- Install dependencies (inside of the `static/hello-world` directory):
+```
+npm install
+```
 
-- **Platform**: Atlassian Forge (Custom UI)
-- **Frontend**: React, Atlassian Design System (@atlaskit)
-- **Backend**: Node.js, Forge API (`api.asApp()`, REST APIs)
-- **Integrations**: Jira REST API, Confluence CQL, Bitbucket API v2.0
+- Modify your app by editing the files in `static/hello-world/src/`.
 
----
+- Build your app (inside of the `static/hello-world` directory):
+```
+npm run build
+```
 
-## 🚀 Getting Started (Development)
+- Deploy your app by running:
+```
+forge deploy
+```
 
-1. Clone the repository:
-   ```bash
-   git clone [https://bitbucket.org/workprint/feature.git](https://bitbucket.org/workprint/feature.git)
-   cd workprint
+- Install your app in an Atlassian site by running:
+```
+forge install
+```
+
+### Notes
+- Use the `forge deploy` command when you want to persist code changes.
+- Use the `forge install` command when you want to install the app on a new site.
+- Once the app is installed on a site, the site picks up the new app changes you deploy without needing to rerun the install command.
+
+## Support
+
+See [Get help](https://developer.atlassian.com/platform/forge/get-help/) for how to get help and provide feedback.
+

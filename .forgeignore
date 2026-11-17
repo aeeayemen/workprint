@@ -1,0 +1,8 @@
+*.zip
+*.tar.gz
+*.rar
+node_modules/
+static/hello-world/node_modules/
+.git/
+.forge/
+
