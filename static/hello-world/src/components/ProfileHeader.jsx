@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Breadcrumbs, { BreadcrumbsItem } from '@atlaskit/breadcrumbs';
 import Avatar from '@atlaskit/avatar';
 import Lozenge from '@atlaskit/lozenge';
@@ -11,14 +11,41 @@ import SwapIcon from '@atlaskit/icon/glyph/refresh';
 import MoreIcon from '@atlaskit/icon/glyph/more';
 import CalendarIcon from '@atlaskit/icon/glyph/calendar';
 import ArrowLeftIcon from '@atlaskit/icon/glyph/arrow-left';
+import { fetchWorkspaceUsers } from '../services/bridgeService';
+import { USERS } from '../data/mockData';
 
 /**
  * ProfileHeader Component
  * Displays breadcrumbs, user avatar, context tags, global action buttons, and sprint header.
  */
-export default function ProfileHeader({ user, onBackToSearch }) {
+export default function ProfileHeader({ user, onBackToSearch, onSelectUser }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuNotice, setMenuNotice] = useState(null);
+  const [squad, setSquad] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSquad() {
+      try {
+        const data = await fetchWorkspaceUsers();
+        if (isMounted) {
+          if (data && Array.isArray(data.users) && data.users.length > 0) {
+            setSquad(data.users);
+          } else {
+            setSquad(Object.values(USERS));
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setSquad(Object.values(USERS));
+        }
+      }
+    }
+    loadSquad();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (!user) return null;
 
@@ -151,7 +178,50 @@ export default function ProfileHeader({ user, onBackToSearch }) {
         </div>
 
         {/* Global Action Group */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: token('space.100', '8px') }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: token('space.100', '8px') }}>
+          {/* Employee Switcher Dropdown */}
+          {squad.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label
+                htmlFor="employee-select-dropdown"
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: token('color.text.subtle', '#5e6c84'),
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Engineer:
+              </label>
+              <select
+                id="employee-select-dropdown"
+                value={user.id}
+                onChange={(e) => {
+                  if (onSelectUser && e.target.value) {
+                    onSelectUser(e.target.value);
+                  }
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: token('border.radius', '3px'),
+                  border: `1px solid ${token('color.border', '#dfe1e6')}`,
+                  backgroundColor: token('color.background.input', '#ffffff'),
+                  color: token('color.text', '#172b4d'),
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {squad.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} {member.email ? `(${member.email})` : `(${member.role || 'Member'})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {onBackToSearch && (
             <Button
               appearance="subtle"

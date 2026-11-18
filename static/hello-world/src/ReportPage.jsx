@@ -97,7 +97,11 @@ function mergeConfluencePages(report, pages) {
  * Main Workprint dashboard displaying cross-product engineering capacity,
  * AI warnings, and detailed task distributions.
  */
-export default function ReportPage({ userId: propUserId, onBackToSearch: propBackToSearch }) {
+export default function ReportPage({
+  userId: propUserId,
+  onBackToSearch: propBackToSearch,
+  onSelectUser: propSelectUser,
+}) {
   const [searchParams] = useSearchParams();
   const params = useParams();
   const navigate = useNavigate();
@@ -108,44 +112,42 @@ export default function ReportPage({ userId: propUserId, onBackToSearch: propBac
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadReport() {
-      setIsLoading(true);
-      try {
-        // Load the existing aggregated report and all current Confluence pages.
-        const [report, confluencePages] = await Promise.all([
-          fetchWorkprintReport(resolvedUserId),
-          fetchConfluencePages(),
-        ]);
-
-        if (isMounted) {
-          if (report) {
-            setUser(mergeConfluencePages(report, confluencePages));
-          } else {
-            // Fallback only if live report could not be retrieved
-            setUser(USERS ? (USERS[resolvedUserId] || USERS['alex-chen']) : null);
-          }
-        }
-      } catch (err) {
-        console.error('[Workprint] Failed to load report for', resolvedUserId, err);
-        if (isMounted) {
-          setUser(USERS ? (USERS[resolvedUserId] || USERS['alex-chen']) : null);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+  const handleSelectUser = useCallback(
+    (newUserId) => {
+      if (propSelectUser) {
+        propSelectUser(newUserId);
+      } else {
+        navigate(`/?userId=${encodeURIComponent(newUserId)}`);
       }
+    },
+    [propSelectUser, navigate]
+  );
+
+  const loadReport = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // Both calls now use asApp() on the backend — no user consent required.
+      const [report, confluencePages] = await Promise.all([
+        fetchWorkprintReport(resolvedUserId),
+        fetchConfluencePages(),
+      ]);
+
+      if (report) {
+        setUser(mergeConfluencePages(report, confluencePages));
+      } else {
+        setUser(USERS ? (USERS[resolvedUserId] || USERS['alex-chen']) : null);
+      }
+    } catch (err) {
+      console.error('[Workprint] Failed to load report for', resolvedUserId, err);
+      setUser(USERS ? (USERS[resolvedUserId] || USERS['alex-chen']) : null);
+    } finally {
+      setIsLoading(false);
     }
-
-    loadReport();
-
-    return () => {
-      isMounted = false;
-    };
   }, [resolvedUserId]);
+
+  useEffect(() => {
+    loadReport();
+  }, [loadReport]);
 
   const handleBackToSearch = useCallback(() => {
     if (propBackToSearch) {
@@ -183,7 +185,11 @@ export default function ReportPage({ userId: propUserId, onBackToSearch: propBac
           flexDirection: 'column',
         }}
       >
-        <ProfileHeader user={user} onBackToSearch={handleBackToSearch} />
+        <ProfileHeader
+          user={user}
+          onBackToSearch={handleBackToSearch}
+          onSelectUser={handleSelectUser}
+        />
         <CapacityAlertBanner alert={user?.rovoAlert} />
         <MetricsCards metrics={user?.metrics} />
         <WorkloadDistributionBar distribution={user?.workloadDistribution} />

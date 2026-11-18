@@ -136,3 +136,50 @@ export async function reassignTask(issueKey, accountId) {
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Trigger the Bitbucket OAuth 2.0 consent flow for the current user.
+ * Atlassian opens the consent popup — user signs in to Bitbucket and approves scopes.
+ * On success, the token is stored securely per-user by the Atlassian platform.
+ *
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function initiateBitbucketAuth() {
+  try {
+    const result = await invoke('initiateBitbucketAuth');
+    return result || { success: false, error: 'No response from backend' };
+  } catch (error) {
+    console.warn('[Workprint Bridge] invoke("initiateBitbucketAuth") error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Check whether the current user has an active Bitbucket OAuth connection.
+ *
+ * @returns {Promise<{connected: boolean}>}
+ */
+export async function checkBitbucketConnection() {
+  try {
+    const result = await invoke('checkBitbucketConnection');
+    return result || { connected: false };
+  } catch (error) {
+    console.warn('[Workprint Bridge] invoke("checkBitbucketConnection") error:', error);
+    return { connected: false };
+  }
+}
+
+/**
+ * Revoke the current user's Bitbucket OAuth token.
+ *
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function disconnectBitbucket() {
+  try {
+    const result = await invoke('disconnectBitbucket');
+    return result || { success: false };
+  } catch (error) {
+    console.warn('[Workprint Bridge] invoke("disconnectBitbucket") error:', error);
+    return { success: false, error: error.message };
+  }
+}

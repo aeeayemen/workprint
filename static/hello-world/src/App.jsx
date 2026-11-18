@@ -21,7 +21,13 @@ function WorkprintRouteHandler({ activeUserId, onSelectUser, onBackToSearch }) {
   const effectiveUserId = activeUserId || queryUserId;
 
   if (effectiveUserId) {
-    return <ReportPage userId={effectiveUserId} onBackToSearch={onBackToSearch} />;
+    return (
+      <ReportPage
+        userId={effectiveUserId}
+        onBackToSearch={onBackToSearch}
+        onSelectUser={onSelectUser}
+      />
+    );
   }
 
   return <SearchPage onSelectUser={onSelectUser} />;
@@ -110,7 +116,12 @@ function WorkprintAppShell() {
         />
         <Route
           path="/report/:userId"
-          element={<ReportPage onBackToSearch={handleBackToSearch} />}
+          element={
+            <ReportPage
+              onBackToSearch={handleBackToSearch}
+              onSelectUser={handleSelectUser}
+            />
+          }
         />
         <Route
           path="*"

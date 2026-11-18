@@ -64,20 +64,24 @@ resources:
 
 permissions:
   scopes:
-    - search:confluence
+    # Jira — App-level read/write access to issues, users, and work items
     - read:jira-work
     - write:jira-work
     - read:jira-user
+    - read:me
+    # Confluence — App-level read access to pages, spaces, and user profiles
+    - read:confluence-content.all
     - read:confluence-content.summary
     - read:confluence-space.summary
     - read:confluence-props
-    - read:me
-    - storage:app
-    - read:confluence-content.all
     - read:confluence-user
+    - search:confluence
+    # Storage — required for Forge Key-Value storage (asApp)
+    - storage:app
   external:
     fetch:
       backend:
+        # Bitbucket Cloud REST API v2 (accessed with the workspace Repository Access Token)
         - address: https://api.bitbucket.org
   content:
     styles:

@@ -11,31 +11,21 @@ const resolver = new Resolver();
 const USE_REAL_APIS = true;
 
 /**
- * Robust Jira REST API request with automatic fallback from asUser to asApp.
- * Gracefully handles NEEDS_AUTHENTICATION_ERR when user consent is pending.
+ * All Jira REST API requests run as the App (asApp).
+ * This grants cross-user, app-level access so any employee's data can be
+ * fetched and reported without requiring individual user OAuth consent.
+ * Required manifest scopes: read:jira-work, read:jira-user, write:jira-work.
  */
 export async function requestJiraWithFallback(pathRoute, options = {}) {
-  try {
-    const res = await api.asUser().requestJira(pathRoute, options);
-    if (res.ok) return res;
-    console.warn(`[Jira Request] asUser returned ${res.status}; falling back to asApp()`);
-  } catch (err) {
-    console.warn(`[Jira Request] asUser threw error (${err.message}); falling back to asApp()`);
-  }
   return await api.asApp().requestJira(pathRoute, options);
 }
 
 /**
- * Robust Confluence REST API request with automatic fallback from asUser to asApp.
+ * All Confluence REST API requests run as the App (asApp).
+ * Required manifest scopes: read:confluence-content.all, search:confluence,
+ * read:confluence-space.summary, read:confluence-user.
  */
 export async function requestConfluenceWithFallback(pathRoute, options = {}) {
-  try {
-    const res = await api.asUser().requestConfluence(pathRoute, options);
-    if (res.ok) return res;
-    console.warn(`[Confluence Request] asUser returned ${res.status}; falling back to asApp()`);
-  } catch (err) {
-    console.warn(`[Confluence Request] asUser threw error (${err.message}); falling back to asApp()`);
-  }
   return await api.asApp().requestConfluence(pathRoute, options);
 }
 
@@ -169,41 +159,155 @@ function createEmptyJiraMetrics() {
 }
 
 // ============================================================================
-// 2. BITBUCKET DATA SERVICE (Bitbucket Cloud REST API v2)
+// 2. BITBUCKET DATA SERVICE (Bitbucket Cloud REST API v2 — App-level token)
 // ============================================================================
 
+/**
+ * Bitbucket workspace repository access token with read:pullrequest scope.
+ * Stored here as a workspace-level app credential — no per-user OAuth required.
+ * All managers/reporters can view all PRs in the workspace without signing in
+ * to Bitbucket individually.
+ */
 const BITBUCKET_ACCESS_TOKEN =
   'ATCTT3xFfGN01R_68WeDtFLdnnx0_TX3IahSuKEjLv6kmDel6oM4aUQbvQQthU9ksWIJK9Vbkit3Lbx4Pr0FJgzrzZ8wDxoLWScMXq1345kyo_isOZ_TWunuit6zYH2DYDb4l0cPSNF68GmJCkBkFYFV_77CAgoZv-oOEpeRGXjbyONBn6sP95A=02DDDA69';
 const BITBUCKET_REPO_WORKSPACE = 'workprint';
 const BITBUCKET_REPO_SLUG = 'feature';
 
-export async function fetchBitbucketActivity(usernameOrEmail) {
+/**
+ * Fetch and filter Bitbucket pull requests and commits specifically for the selected user.
+ * Queries Bitbucket Cloud REST API v2 using workspace app-level access token, then filters
+ * pull requests and code activity matching the target employee's accountId, username, or email.
+ *
+ * @param {object|string} targetUserOrIdentifier - The selected user object or identifier.
+ * @param {string} [optionalAccountId] - Explicit Atlassian accountId if available.
+ */
+export async function fetchBitbucketActivity(targetUserOrIdentifier, optionalAccountId = '') {
   try {
-    const url = `https://api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests?state=OPEN&pagelen=20`;
+    // 1. Normalize target employee identification criteria
+    let targetId = '';
+    let targetName = '';
+    let targetEmail = '';
 
-    const response = await api.fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${BITBUCKET_ACCESS_TOKEN}`,
-      },
+    if (typeof targetUserOrIdentifier === 'object' && targetUserOrIdentifier !== null) {
+      targetId = String(targetUserOrIdentifier.id || targetUserOrIdentifier.accountId || optionalAccountId || '').toLowerCase().trim();
+      targetName = String(targetUserOrIdentifier.name || targetUserOrIdentifier.displayName || targetUserOrIdentifier.username || '').toLowerCase().trim();
+      targetEmail = String(targetUserOrIdentifier.email || targetUserOrIdentifier.emailAddress || '').toLowerCase().trim();
+    } else {
+      const raw = String(targetUserOrIdentifier || optionalAccountId || '').toLowerCase().trim();
+      if (raw.includes('@')) {
+        targetEmail = raw;
+      } else if (raw.startsWith('712020:') || raw.length > 20) {
+        targetId = raw;
+      } else {
+        targetName = raw.replace(/-/g, ' ');
+      }
+    }
+
+    if (optionalAccountId && !targetId) {
+      targetId = String(optionalAccountId).toLowerCase().trim();
+    }
+
+    // 2. Fetch open Pull Requests from repository (Bitbucket v2 REST API)
+    const prUrl = `https://api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_WORKSPACE}/${BITBUCKET_REPO_SLUG}/pullrequests?state=OPEN&pagelen=50`;
+
+    // 3. Fetch recent commits from repository to cross-reference code contributors
+    const commitsUrl = `https://api.bitbucket.org/2.0/repositories/${BITBUCKET_REPO_WORKSPACE}/${BITBUCKET_REPO_SLUG}/commits?pagelen=30`;
+
+    const [prResponse, commitsResponse] = await Promise.all([
+      api.fetch(prUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${BITBUCKET_ACCESS_TOKEN}`,
+        },
+      }),
+      api.fetch(commitsUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${BITBUCKET_ACCESS_TOKEN}`,
+        },
+      }),
+    ]);
+
+    let prs = [];
+    if (prResponse.ok) {
+      const prData = await prResponse.json();
+      prs = prData.values || [];
+    }
+
+    let repoCommits = [];
+    if (commitsResponse.ok) {
+      const commitsData = await commitsResponse.json();
+      repoCommits = commitsData.values || [];
+    }
+
+    // Helper: test if an author or participant object matches the target employee
+    const matchesUser = (userObj, rawAuthorString = '') => {
+      if (!userObj && !rawAuthorString) return false;
+
+      const objAccountId = String(userObj?.account_id || '').toLowerCase();
+      const objDisplayName = String(userObj?.display_name || '').toLowerCase();
+      const objNickname = String(userObj?.nickname || '').toLowerCase();
+      const rawStr = String(rawAuthorString || '').toLowerCase();
+
+      // Check accountId (Atlassian accountId)
+      if (targetId && (objAccountId === targetId || rawStr.includes(targetId))) {
+        return true;
+      }
+
+      // Check email
+      if (targetEmail && (rawStr.includes(targetEmail) || objNickname.includes(targetEmail))) {
+        return true;
+      }
+
+      // Check display name / nickname
+      if (targetName) {
+        if (objDisplayName && (objDisplayName === targetName || objDisplayName.includes(targetName) || targetName.includes(objDisplayName))) {
+          return true;
+        }
+        if (objNickname && (objNickname === targetName || objNickname.includes(targetName))) {
+          return true;
+        }
+        if (rawStr && rawStr.includes(targetName)) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    // Filter PRs specifically for the selected user:
+    // Matches if user is the PR author, designated reviewer, participant, or author of commits in the repo/PR
+    const matchingPrs = prs.filter((pr) => {
+      // 1. Direct PR author match
+      if (matchesUser(pr.author)) return true;
+
+      // 2. Reviewer match
+      if (Array.isArray(pr.reviewers) && pr.reviewers.some((r) => matchesUser(r))) return true;
+
+      // 3. Participant match
+      if (Array.isArray(pr.participants) && pr.participants.some((p) => matchesUser(p?.user))) return true;
+
+      // 4. Branch / repo commits authored by this user
+      const userHasCommitsInRepo = repoCommits.some((c) => matchesUser(c.author?.user, c.author?.raw));
+      if (userHasCommitsInRepo) {
+        return true;
+      }
+
+      return false;
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      return parseBitbucketResponse(data);
-    } else {
-      console.warn(`[Bitbucket Service] Non-OK status from Bitbucket API: ${response.status}`);
-    }
+    return parseBitbucketResponse(matchingPrs);
   } catch (error) {
-    console.warn('[Bitbucket Service] Bitbucket external fetch error handled safely:', error.message);
+    console.warn('[Bitbucket Service] Fetch error (safely handled):', error.message);
   }
 
   return createEmptyBitbucketMetrics();
 }
 
-function parseBitbucketResponse(data) {
-  const prs = data.values || [];
+function parseBitbucketResponse(matchingPrs) {
+  const prs = Array.isArray(matchingPrs) ? matchingPrs : (matchingPrs?.values || []);
   if (prs.length === 0) return createEmptyBitbucketMetrics();
 
   let totalReviewHours = 0;
@@ -437,7 +541,7 @@ export async function aggregateLiveWorkprintReport(userIdentifier, context = {})
 
   const [jiraResult, bitbucketResult, confluenceResult] = await Promise.allSettled([
     fetchJiraWorkload(accountId),
-    fetchBitbucketActivity(targetUser.email || targetUser.name),
+    fetchBitbucketActivity(targetUser, accountId),
     fetchConfluenceDocs(accountId),
   ]);
 
